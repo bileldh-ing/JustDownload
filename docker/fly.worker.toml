@@ -1,0 +1,38 @@
+# Starting point for running the JustDownload worker on Fly.io (not deployed by this repo).
+# fly launch --copy-config -c docker/fly.worker.toml --no-deploy
+app = "justdownload-worker-CHANGE-ME"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "worker.Dockerfile"
+
+[processes]
+  app = "all"
+
+[env]
+  NODE_ENV = "production"
+  DATA_DIR = "/data"
+  PORT = "8080"
+  # PUBLIC_URL = "https://justdownload-worker-CHANGE-ME.fly.dev"
+  # CORS_ORIGINS = "https://your-web-app.vercel.app"
+
+[[mounts]]
+  source = "jd_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health/ready"
+    timeout = "5s"
+
+[[vm]]
+  memory = "2gb"
+  cpus = 2

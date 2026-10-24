@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# One run per ref: a newer push cancels the older run instead of piling up.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI_WORKER_TOKEN: ci-worker-token-0123456789abcdefghijkl
+  CI_SIGNING_SECRET: ci-signing-secret-0123456789abcdefghijklmnop
+
+jobs:
+  verify:
+    name: Lint, typecheck, unit + integration tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: Install FFmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg && ffmpeg -version | head -1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Unit tests (core)
+        run: pnpm --filter @justdownload/core test
+      - name: Unit tests (worker)
+        run: pnpm --filter @justdownload/worker test
+      - name: Unit tests (web)
+        run: pnpm --filter @justdownload/web test
+      - name: Integration tests (real FFmpeg pipeline + Redis/BullMQ)
+        run: pnpm --filter @justdownload/worker test:integration
+        env: { REDIS_URL: "redis://localhost:6379" }
+      - name: Dependency audit (production deps, high+)
+        run: pnpm audit --prod --audit-level=high
+      - name: Build worker
+        run: pnpm --filter @justdownload/worker build
+      - name: Build web
+        run: pnpm --filter @justdownload/web build
+
+  e2e:
+    name: Playwright E2E (web-only and full pipeline)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: Install FFmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
+      - run: pnpm install --frozen-lockfile
+      - name: Build worker
+        run: pnpm --filter @justdownload/worker build
+      - name: Build web (CSP allows the local worker)
+        run: pnpm --filter @justdownload/web build
+        env: { NEXT_PUBLIC_WORKER_PUBLIC_URL: "http://localhost:8080" }
+      - name: Install Playwright Chromium
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+      - name: E2E without a worker (inspection-only mode, as on Vercel)
+        working-directory: apps/web
+        run: pnpm exec playwright test
+      - name: Start worker (API + consumers, Redis-backed)
+        working-directory: apps/worker
+        env:
+          NODE_ENV: test
+          REDIS_URL: redis://localhost:6379
+          DATA_DIR: /tmp/jd-data
+          PORT: "8080"
+          PUBLIC_URL: http://localhost:8080
+          CORS_ORIGINS: http://localhost:3100
+          JD_ALLOW_PRIVATE_NETWORK: "1"
+          WORKER_API_TOKEN: ${{ env.CI_WORKER_TOKEN }}
+          SIGNING_SECRET: ${{ env.CI_SIGNING_SECRET }}
+        run: |
+          nohup node dist/main.js all > /tmp/worker.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/health/ready && exit 0; sleep 1; done
+          cat /tmp/worker.log; exit 1
+      - name: E2E with the worker (real inspection, MP3 job, download, cancel)
+        working-directory: apps/web
+        env:
+          E2E_WORKER_URL: http://localhost:8080
+          E2E_WORKER_TOKEN: ${{ env.CI_WORKER_TOKEN }}
+        run: pnpm exec playwright test
+      - name: Worker log (on failure)
+        if: failure()
+        run: tail -n 200 /tmp/worker.log || true
+
+  docker:
+    name: Docker images (build, smoke test, scan)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build worker image
+        run: docker build -f docker/worker.Dockerfile -t justdownload-worker:ci .
+      - name: Build web image
+        run: docker build -f docker/web.Dockerfile -t justdownload-web:ci .
+      - name: Smoke test worker image (non-root, FFmpeg present, ready)
+        run: |
+          docker run -d --name w -p 8081:8080 -e WORKER_API_TOKEN=$CI_WORKER_TOKEN -e SIGNING_SECRET=$CI_SIGNING_SECRET justdownload-worker:ci all
+          for i in $(seq 1 30); do curl -sf http://localhost:8081/health/ready && break; sleep 1; done
+          curl -sf http://localhost:8081/health/ready
+          test "$(docker exec w id -u)" != "0"
+          curl -sf -H "authorization: Bearer $CI_WORKER_TOKEN" http://localhost:8081/v1/health
+      - name: Smoke test web image
+        run: |
+          docker run -d --name web -p 3001:3000 justdownload-web:ci
+          for i in $(seq 1 30); do curl -sf http://localhost:3001/api/v1/health && break; sleep 1; done
+          curl -sf http://localhost:3001/api/v1/health
+          curl -sf -o /dev/null http://localhost:3001/
+      - name: Image vulnerability scan (informational, does not gate)
+        continue-on-error: true
+        run: |
+          for img in justdownload-worker:ci justdownload-web:ci; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --quiet --severity CRITICAL,HIGH --ignore-unfixed --exit-code 0 "$img"
+          done
+
+  secrets:
+    name: Secret scan (verified secrets fail the build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: TruffleHog (working tree)
+        run: docker run --rm -v "$PWD:/repo:ro" trufflesecurity/trufflehog:latest filesystem /repo --results=verified --fail --no-update

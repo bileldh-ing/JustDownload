@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const csp = [
@@ -20,6 +21,9 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ["@justdownload/core"],
+  // Docker builds use a self-contained server; Vercel ignores this.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
+  outputFileTracingRoot: path.join(import.meta.dirname, "../.."),
   async headers() {
     return [{
       source: "/:path*",

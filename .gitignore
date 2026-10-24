@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.vercel
+/data/
+/tmp/
+test-results/
+playwright-report/
+apps/worker/test/.fixtures/
+next-env.d.ts

@@ -1,0 +1,19 @@
+{
+  "name": "@justdownload/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "JustDownload shared domain: provider policy registry, URL safety, job state machine, format options, filenames.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ipaddr.js": "2.5.0",
+    "zod": "4.6.7"
+  }
+}

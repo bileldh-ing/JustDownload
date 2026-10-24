@@ -124,14 +124,14 @@ jobs:
         run: docker build -f docker/web.Dockerfile -t justdownload-web:ci .
       - name: Smoke test worker image (non-root, FFmpeg present, ready)
         run: |
-          docker run -d --name w -p 8081:8080 -e WORKER_API_TOKEN=$CI_WORKER_TOKEN -e SIGNING_SECRET=$CI_SIGNING_SECRET justdownload-worker:ci all
+          docker run -d --name jd-worker -p 8081:8080 -e WORKER_API_TOKEN=$CI_WORKER_TOKEN -e SIGNING_SECRET=$CI_SIGNING_SECRET justdownload-worker:ci all
           for i in $(seq 1 30); do curl -sf http://localhost:8081/health/ready && break; sleep 1; done
           curl -sf http://localhost:8081/health/ready
-          test "$(docker exec w id -u)" != "0"
+          test "$(docker exec jd-worker id -u)" != "0"
           curl -sf -H "authorization: Bearer $CI_WORKER_TOKEN" http://localhost:8081/v1/health
       - name: Smoke test web image
         run: |
-          docker run -d --name web -p 3001:3000 justdownload-web:ci
+          docker run -d --name jd-web -p 3001:3000 justdownload-web:ci
           for i in $(seq 1 30); do curl -sf http://localhost:3001/api/v1/health && break; sleep 1; done
           curl -sf http://localhost:3001/api/v1/health
           curl -sf -o /dev/null http://localhost:3001/

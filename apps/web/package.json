@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.12.1",
   "description": "JustDownload web app (Next.js): downloader UI and the /api/v1 backend-for-frontend.",
   "scripts": {
     "dev": "next dev -p 3000",

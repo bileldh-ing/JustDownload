@@ -12,3 +12,5 @@ test-results/
 playwright-report/
 apps/worker/test/.fixtures/
 next-env.d.ts
+tests/e2e/.fixtures/
+apps/web/test-results/

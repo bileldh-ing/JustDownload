@@ -106,7 +106,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const auth = req.headers.authorization ?? "";
     if (!safeEqual(auth.startsWith("Bearer ") ? auth.slice(7) : "", cfg.apiToken)) throw new JdError("UNAUTHORIZED");
     let queue: WorkerHealth["queue"];
-    try { queue = await deps.queue.counts(); } catch { queue = null; }
+    try { queue = await Promise.race([deps.queue.counts(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 2000))]); } catch { queue = null; }
     const storeOk = await store.ping();
     const accepting = storeOk && !!deps.tools.ffmpeg && !!deps.tools.ffprobe && (queue == null || (queue.waiting ?? 0) < cfg.maxQueueDepth);
     return {

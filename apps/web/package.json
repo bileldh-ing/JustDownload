@@ -1,0 +1,33 @@
+{
+  "name": "@justdownload/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "JustDownload web app (Next.js): downloader UI and the /api/v1 backend-for-frontend.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@justdownload/core": "workspace:*",
+    "@radix-ui/react-dropdown-menu": "2.2.1",
+    "ipaddr.js": "2.5.0",
+    "lucide-react": "1.61.0",
+    "motion": "14.5.0",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3"
+  }
+}

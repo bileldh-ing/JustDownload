@@ -226,6 +226,17 @@ function hostMatches(hostname: string, pattern: string): boolean {
   return hostname === pattern || hostname.endsWith(`.${pattern}`);
 }
 
+/** Same matching rule over the public projection (used client-side for instant feedback; the server decides). */
+export function matchPublicProvider(hostname: string, pathname: string, providers: readonly PublicProvider[]): PublicProvider | null {
+  const h = hostname.toLowerCase();
+  for (const p of providers) {
+    if (!p.hosts.some((pattern) => hostMatches(h, pattern))) continue;
+    if (p.pathPrefixes && !p.pathPrefixes.some((pre) => pathname.startsWith(pre))) continue;
+    return p;
+  }
+  return providers.find((p) => p.id === "direct_media") ?? null;
+}
+
 /** Find the provider for a normalized URL. Unknown hosts fall back to the direct-media provider. */
 export function resolveProvider(target: string | { hostname: string; pathname?: string }, registry: readonly ProviderPolicy[]): ProviderPolicy {
   const h = (typeof target === "string" ? target : target.hostname).toLowerCase();
@@ -262,6 +273,7 @@ export interface PublicProvider {
   id: string;
   displayName: string;
   hosts: readonly string[];
+  pathPrefixes: readonly string[] | null;
   download: DownloadCapability;
   downloadLabel: string;
   metadataMethod: MetadataMethod;
@@ -275,7 +287,7 @@ export interface PublicProvider {
 
 export function toPublicProvider(p: ProviderPolicy): PublicProvider {
   return {
-    id: p.id, displayName: p.displayName, hosts: p.hosts, download: p.download, downloadLabel: CAPABILITY_LABEL[p.download],
+    id: p.id, displayName: p.displayName, hosts: p.hosts, pathPrefixes: p.pathPrefixes ?? null, download: p.download, downloadLabel: CAPABILITY_LABEL[p.download],
     metadataMethod: p.metadataMethod, reason: p.reason, officialRoute: p.officialRoute, docsUrl: p.docsUrl,
     lastReviewed: p.lastReviewed, features: p.features, status: p.status,
   };

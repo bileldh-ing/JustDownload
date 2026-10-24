@@ -79,7 +79,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): WorkerConfi
     redisUrl: e.REDIS_URL ?? null,
     apiToken: e.WORKER_API_TOKEN ?? "dev-worker-token-change-me",
     signingSecret: e.SIGNING_SECRET ?? "dev-signing-secret-change-me-dev-signing-secret",
-    publicUrl: e.PUBLIC_URL ? e.PUBLIC_URL.replace(/\/$/, "") : null,
+    publicUrl: (e.PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL) ? (e.PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL)!.replace(/\/$/, "") : null,
     corsOrigins: e.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
     dataDir: path.resolve(e.DATA_DIR),
     maxSourceBytes: Math.round(e.MAX_SOURCE_MB * MB),

@@ -1,0 +1,48 @@
+# Render Blueprint: JustDownload processing worker on Render's free tier.
+# Free instances sleep after ~15 min idle, have 512 MB RAM and an ephemeral disk,
+# so limits are kept small. Artifacts are temporary by design.
+services:
+  - type: web
+    name: justdownload-worker
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./docker/worker.Dockerfile
+    dockerContext: .
+    dockerCommand: all
+    healthCheckPath: /health/live
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_API_TOKEN
+        generateValue: true
+      - key: SIGNING_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: justdownload-redis
+          property: connectionString
+      - key: CONCURRENCY_AUDIO
+        value: "1"
+      - key: CONCURRENCY_VIDEO
+        value: "1"
+      - key: MAX_SOURCE_MB
+        value: "300"
+      - key: MAX_UPLOAD_MB
+        value: "200"
+      - key: MAX_DURATION_MIN
+        value: "60"
+      - key: MAX_DISK_GB
+        value: "2"
+      - key: RETENTION_MINUTES
+        value: "30"
+      - key: CORS_ORIGINS
+        value: https://justdownload-one.vercel.app
+  - type: keyvalue
+    name: justdownload-redis
+    plan: free
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
